@@ -1,48 +1,50 @@
-version: "3.9"
-
+#
 services:
   mount:
-    image: rclone/rclone:1.65
-    #build:
-    # context: .
-    # dockerfile: Dockerfile
-    ports:
-      - 5572:5572
+    image: rclone/rclone:1.67
     volumes:
-      - type: bind
-        source: ./rclone.config
-        target: /root/.config/rclone/rclone.conf
-      - /data/sbox-s3/s3:/data/s3
-      - /data/sbox-s3/cache:/data/cache
-    command: mount -v --cache-dir /data/cache --dir-cache-time 1m --vfs-cache-mode full --vfs-cache-max-age 168h --allow-non-empty --allow-other --use-mmap=true --vfs-cache-max-size 250G  sbox:s3 /data/s3
+      - ./conf/rclone/rclone.conf:/config/rclone/rclone.conf
+      - ./data:/data:shared
+    devices:
+      - /dev/fuse:/dev/fuse:rwm
+    command: >
+      mount -v 
+      --cache-dir /data/cache 
+      --dir-cache-time 1m 
+      --vfs-cache-mode full 
+      --vfs-cache-max-age 168h 
+      --allow-non-empty 
+      --allow-other 
+      --use-mmap=true 
+      --vfs-cache-min-free-space 5G  
+      sbox:s4 /data/s3
     privileged: true
+  
   s3:
-    #image: sbox-s3:latest
-    #build:
-    #  context: .
-    #  dockerfile: Dockerfile
-    image: chrislusf/seaweedfs:3.61
-    #privileged: true
+    image: chrislusf/seaweedfs:3.69
     ports:
       - 9333:9333
       - 8090:8090
       - 8888:8888
+      - 19888:19888
       - 8333:8333
       - 7333:7333
     volumes:
-      - type: bind
-        source: ./filer.toml
-        target: /etc/seaweedfs/filer.toml
-      - type: bind
-        source: ./s3.json
-        target: /etc/seaweedfs/s3.json
-      # Replace /data:/data with your desired mount point, which you configured inb `sbox-s3.sh`
-      - /data/sbox-s3/s3:/data/s3
-    command: server -dir=/data/s3 -s3 -s3.config=/etc/seaweedfs/s3.json -master.volumeSizeLimitMB=1024 -volume.max=0 -volume.port=8090 -s3.allowEmptyFolder=false -s3.allowDeleteBucketNotEmpty=true
-
-    #/app/start.sh
+      - ./conf/seaweedfs/filer.toml:/etc/seaweedfs/filer.toml
+      - ./conf/seaweedfs/s3.json:/etc/seaweedfs/s3.json
+      - ./data:/data:shared
+    entrypoint: /bin/ash
+    command: >
+      -c 
+      "sleep 5 &&
+       weed server 
+        -dir=/data/s3  
+        -s3 
+        -s3.config /etc/seaweedfs/s3.json 
+        -master.volumeSizeLimitMB 1024 
+        -volume.max 0 -
+        volume.port 8090 
+        -s3.allowEmptyFolder false 
+        -s3.allowDeleteBucketNotEmpty true"
     depends_on:
       - mount
-# #volumes:
-# #  data:
-
